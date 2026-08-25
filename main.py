@@ -3,6 +3,12 @@ import os, time, json, urllib.request, subprocess, base64, glob, random, request
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID")
 TOKEN_PICKLE_BASE64 = os.environ.get("TOKEN_PICKLE_BASE64")
+REVIEW_TIMEOUT_MINUTES = 10  # GitHub Actions Free Minutes မကုန်စေရန် ၁၀ မိနစ် Timeout ထားသည်
+
+ENABLE_YOUTUBE = True
+ENABLE_TIKTOK = False
+ENABLE_FACEBOOK = False
+ENABLE_INSTAGRAM = False
 
 base_dir = os.path.dirname(os.path.abspath(__file__))
 temp_dir = os.path.join(base_dir, 'temp')
@@ -45,6 +51,25 @@ def get_next_topic():
         json.dump(used_ids, f, indent=4)
     return chosen
 
+def upload_to_youtube(video_path, topic):
+    with open(token_pickle_file, 'rb') as token:
+        creds = pickle.load(token)
+    if creds and creds.expired and creds.refresh_token:
+        creds.refresh(Request())
+    youtube = build('youtube', 'v3', credentials=creds)
+
+    body = {
+        'snippet': {'title': f"{topic['title1']} - {topic['title2']} #Shorts"[:95], 'description': f"{topic['script']}\n\n#shorts #darkpsychology #psychologyfacts #mindset", 'categoryId': '27'},
+        'status': {'privacyStatus': 'public', 'selfDeclaredMadeForKids': False}
+    }
+    res = youtube.videos().insert(part=','.join(body.keys()), body=body, media_body=MediaFileUpload(video_path, resumable=True, mimetype='video/mp4')).execute()
+    video_url = f"https://youtube.com/shorts/{res.get('id')}"
+    requests.post(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage", data={'chat_id': TELEGRAM_CHAT_ID, 'text': f"🎉 *YouTube ပေါ်သို့ အောင်မြင်စွာ တင်ပြီးပါပြီ!*\n\n🔗 [Watch Short]({video_url})", 'parse_mode': 'Markdown'})
+
+def publish_all(video_path, topic):
+    if ENABLE_YOUTUBE:
+        upload_to_youtube(video_path, topic)
+
 def build_clean_ass(script, topic, total_dur, ass_path):
     words = script.strip().split()
     chunks = [" ".join(words[i:i + 5]) for i in range(0, len(words), 5)]
@@ -76,56 +101,109 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     with open(ass_path, "w", encoding="utf-8") as f:
         f.write(ass_content)
 
-topic = get_next_topic()
-voice_path = os.path.join(temp_dir, "voice.mp3")
-subprocess.run(f'python -m edge_tts --voice en-US-ChristopherNeural --text "{topic["script"]}" --write-media "{voice_path}"', shell=True, check=True)
+def generate_video():
+    for f in glob.glob(os.path.join(temp_dir, "*")):
+        try: os.remove(f)
+        except Exception: pass
 
-out_dur = subprocess.check_output(f'ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "{voice_path}"', shell=True).decode().strip()
-voice_dur = float(out_dur)
-ass_path = os.path.join(temp_dir, "subtitles.ass")
-build_clean_ass(topic["script"], topic, voice_dur, ass_path)
+    topic = get_next_topic()
+    voice_path = os.path.join(temp_dir, "voice.mp3")
+    subprocess.run(f'python -m edge_tts --voice en-US-ChristopherNeural --text "{topic["script"]}" --write-media "{voice_path}"', shell=True, check=True)
 
-headers = {'User-Agent': 'Mozilla/5.0'}
-for idx in range(1, 7):
-    img_path = os.path.join(temp_dir, f"img_{idx}.jpg")
-    r_seed = random.randint(1000, 999999)
-    try:
-        req = urllib.request.Request(f"https://picsum.photos/seed/{r_seed}/1080/1920", headers=headers)
-        with urllib.request.urlopen(req, timeout=10) as resp, open(img_path, "wb") as out:
-            out.write(resp.read())
-    except Exception:
-        subprocess.run(f'ffmpeg -f lavfi -i color=c=0x111111:s=1080x1920:d=1 -frames:v 1 "{img_path}" -y', shell=True)
+    out_dur = subprocess.check_output(f'ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 "{voice_path}"', shell=True).decode().strip()
+    voice_dur = float(out_dur)
+    ass_path = os.path.join(temp_dir, "subtitles.ass")
+    build_clean_ass(topic["script"], topic, voice_dur, ass_path)
 
-bgm_path = os.path.join(temp_dir, "bgm.mp3")
-subprocess.run(f'ffmpeg -f lavfi -i "sine=frequency=55:duration=40" -filter:a "volume=0.1" "{bgm_path}" -y', shell=True)
+    headers = {'User-Agent': 'Mozilla/5.0'}
+    for idx in range(1, 7):
+        img_path = os.path.join(temp_dir, f"img_{idx}.jpg")
+        r_seed = random.randint(1000, 999999)
+        try:
+            req = urllib.request.Request(f"https://picsum.photos/seed/{r_seed}/1080/1920", headers=headers)
+            with urllib.request.urlopen(req, timeout=10) as resp, open(img_path, "wb") as out:
+                out.write(resp.read())
+        except Exception:
+            subprocess.run(f'ffmpeg -f lavfi -i color=c=0x111111:s=1080x1920:d=1 -frames:v 1 "{img_path}" -y', shell=True)
 
-clip_dur = voice_dur / 6.0
-frames = int(clip_dur * 30)
-clips_txt = os.path.join(temp_dir, "clips.txt")
-with open(clips_txt, "w", encoding="utf-8") as f:
-    for i in range(1, 7):
-        in_img = os.path.join(temp_dir, f"img_{i}.jpg")
-        out_clip = os.path.join(temp_dir, f"clip_{i}.mp4")
-        subprocess.run(f'ffmpeg -i "{in_img}" -vf "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,zoompan=z=\'min(zoom+0.0015,1.25)\':x=\'iw/2-(iw/zoom/2)\':y=\'ih/2-(ih/zoom/2)\':d={frames}:s=1080x1920:fps=30" -c:v libx264 -pix_fmt yuv420p -frames:v {frames} -y "{out_clip}"', shell=True, check=True)
-        f.write(f"file '{out_clip}'\n")
+    bgm_path = os.path.join(temp_dir, "bgm.mp3")
+    subprocess.run(f'ffmpeg -f lavfi -i "sine=frequency=55:duration=40" -filter:a "volume=0.1" "{bgm_path}" -y', shell=True)
 
-output_video = os.path.join(output_dir, f"Short_{int(time.time())}.mp4")
-escaped_ass = ass_path.replace("\\", "/").replace(":", "\\:")
-subprocess.run(f'ffmpeg -f concat -safe 0 -i "{clips_txt}" -i "{voice_path}" -i "{bgm_path}" -filter_complex "[0:v]ass=\'{escaped_ass}\'[v_out];[2:a]volume=0.12[bgm_vol];[1:a][bgm_vol]amix=inputs=2:duration=first[a_out]" -map "[v_out]" -map "[a_out]" -c:v libx264 -c:a aac -b:a 192k -pix_fmt yuv420p -shortest "{output_video}" -y', shell=True, check=True)
+    clip_dur = voice_dur / 6.0
+    frames = int(clip_dur * 30)
+    clips_txt = os.path.join(temp_dir, "clips.txt")
+    with open(clips_txt, "w", encoding="utf-8") as f:
+        for i in range(1, 7):
+            in_img = os.path.join(temp_dir, f"img_{i}.jpg")
+            out_clip = os.path.join(temp_dir, f"clip_{i}.mp4")
+            subprocess.run(f'ffmpeg -i "{in_img}" -vf "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,zoompan=z=\'min(zoom+0.0015,1.25)\':x=\'iw/2-(iw/zoom/2)\':y=\'ih/2-(ih/zoom/2)\':d={frames}:s=1080x1920:fps=30" -c:v libx264 -pix_fmt yuv420p -frames:v {frames} -y "{out_clip}"', shell=True, check=True)
+            f.write(f"file '{out_clip}'\n")
 
-with open(token_pickle_file, 'rb') as token:
-    creds = pickle.load(token)
-if creds and creds.expired and creds.refresh_token:
-    creds.refresh(Request())
-youtube = build('youtube', 'v3', credentials=creds)
+    output_video = os.path.join(output_dir, f"{topic['id']}_{int(time.time())}.mp4")
+    escaped_ass = ass_path.replace("\\", "/").replace(":", "\\:")
+    subprocess.run(f'ffmpeg -f concat -safe 0 -i "{clips_txt}" -i "{voice_path}" -i "{bgm_path}" -filter_complex "[0:v]ass=\'{escaped_ass}\'[v_out];[2:a]volume=0.12[bgm_vol];[1:a][bgm_vol]amix=inputs=2:duration=first[a_out]" -map "[v_out]" -map "[a_out]" -c:v libx264 -c:a aac -b:a 192k -pix_fmt yuv420p -shortest "{output_video}" -y', shell=True, check=True)
+    return output_video, topic
 
-body = {
-    'snippet': {'title': f"{topic['title1']} - {topic['title2']} #Shorts"[:95], 'description': f"{topic['script']}\n\n#shorts #psychology", 'categoryId': '27'},
-    'status': {'privacyStatus': 'public', 'selfDeclaredMadeForKids': False}
-}
-res = youtube.videos().insert(part=','.join(body.keys()), body=body, media_body=MediaFileUpload(output_video, resumable=True, mimetype='video/mp4')).execute()
-video_url = f"https://youtube.com/shorts/{res.get('id')}"
+# Review Loop with Telegram Buttons
+while True:
+    output_video, topic = generate_video()
+    
+    caption = (
+        f"🎬 *New Video Ready for Review!*\n\n"
+        f"📌 *Title:* {topic['title1']} - {topic['title2']}\n\n"
+        f"📝 *Script:*\n{topic['script']}\n\n"
+        f"⏳ *Auto-Publish:* {REVIEW_TIMEOUT_MINUTES} မိနစ်အတွင်း မစစ်ပါက Auto တင်ပါမည်။"
+    )
+    reply_markup = {
+        "inline_keyboard": [
+            [
+                {"text": "🚀 Publish Now", "callback_data": "btn_publish"},
+                {"text": "🔄 Regenerate New", "callback_data": "btn_regenerate"}
+            ],
+            [
+                {"text": "❌ Cancel / Skip", "callback_data": "btn_discard"}
+            ]
+        ]
+    }
+    
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendVideo"
+    with open(output_video, 'rb') as vf:
+        requests.post(url, files={'video': vf}, data={'chat_id': TELEGRAM_CHAT_ID, 'caption': caption, 'parse_mode': 'Markdown', 'reply_markup': json.dumps(reply_markup)})
 
-requests.post(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage", data={'chat_id': TELEGRAM_CHAT_ID, 'text': f"🚀 *Cloud Auto-Publish အောင်မြင်ပါသည်!*\n\n📌 *Title:* {topic['title1']}\n🔗 [Watch Short]({video_url})", 'parse_mode': 'Markdown'})
-with open(output_video, 'rb') as vf:
-    requests.post(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendVideo", files={'video': vf}, data={'chat_id': TELEGRAM_CHAT_ID, 'caption': f"🎥 Auto-Generated Video ({topic['title2']})"})
+    # Listen for button clicks
+    start_time = time.time()
+    decision = None
+    timeout_sec = REVIEW_TIMEOUT_MINUTES * 60
+    
+    while (time.time() - start_time) < timeout_sec:
+        try:
+            updates = requests.get(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getUpdates", params={"timeout": 5}, timeout=15).json()
+            if "result" in updates:
+                for item in updates["result"]:
+                    requests.get(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/getUpdates", params={"offset": item["update_id"] + 1})
+                    if "callback_query" in item:
+                        action = item["callback_query"].get("data")
+                        if action == "btn_publish":
+                            decision = "PUBLISH"
+                            break
+                        elif action == "btn_regenerate":
+                            decision = "REGENERATE"
+                            break
+                        elif action == "btn_discard":
+                            decision = "DISCARD"
+                            break
+            if decision:
+                break
+        except Exception:
+            pass
+        time.sleep(2)
+
+    if not decision or decision == "PUBLISH":
+        publish_all(output_video, topic)
+        break
+    elif decision == "REGENERATE":
+        requests.post(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage", data={'chat_id': TELEGRAM_CHAT_ID, 'text': "🔄 အကြောင်းအရာအသစ်ဖြင့် ဗီဒီယိုအသစ် ချက်ချင်း ထုတ်လုပ်နေပါသည်..."})
+        continue
+    elif decision == "DISCARD":
+        requests.post(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage", data={'chat_id': TELEGRAM_CHAT_ID, 'text': "❌ Video cancelled."})
+        break
