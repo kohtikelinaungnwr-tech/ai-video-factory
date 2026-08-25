@@ -1,0 +1,50 @@
+[
+  {
+    "id": "T01",
+    "angle": "THE SILENCE WEAPON",
+    "title1": "WIN EVERY ARGUMENT",
+    "title2": "THE SILENCE WEAPON",
+    "script": "When someone insults you, pause and stare into their eyes for two seconds. Then ask calmly: Are you okay? This psychological pattern interrupt destroys their frame of control instantly.",
+    "keywords": ["dark", "psychology", "mystery", "shadow", "focus", "eyes"]
+  },
+  {
+    "id": "T02",
+    "angle": "THE TRIANGLE GAZE",
+    "title1": "EYE CONTACT HACK",
+    "title2": "THE TRIANGLE GAZE",
+    "script": "If you want to create instant romantic tension, use the triangle technique. While talking to someone, look at their left eye first, then slowly drop your gaze down to their lips, and back up to their right eye. This subtle eye movement signals deep attraction and activates their subconscious desire.",
+    "keywords": ["portrait", "eyes", "face", "gaze", "mystery", "lens"]
+  },
+  {
+    "id": "T03",
+    "angle": "THE ZEIGARNIK EFFECT",
+    "title1": "DARK PSYCHOLOGY",
+    "title2": "THE ZEIGARNIK EFFECT",
+    "script": "Human brains hate uncompleted tasks. If you want someone thinking about you all day, stop the conversation right at the most exciting part. They will replay your words until they hear from you again.",
+    "keywords": ["brain", "abstract", "deep", "thought", "shadow", "neon"]
+  },
+  {
+    "id": "T04",
+    "angle": "LOVE BOMBING TRAP",
+    "title1": "BEWARE OF THIS",
+    "title2": "LOVE BOMBING TRAP",
+    "script": "If someone makes you feel like their entire world in the first week, be extremely careful. This is called Love Bombing. Manipulators shower you with non-stop affection, compliments, and future promises to rush emotional attachment. Once your defenses are completely down, they suddenly withdraw their affection to gain absolute control over your self esteem.",
+    "keywords": ["dark", "forest", "fog", "vintage", "mountain", "alone"]
+  },
+  {
+    "id": "T05",
+    "angle": "BEN FRANKLIN EFFECT",
+    "title1": "SOCIAL PSYCHOLOGY",
+    "title2": "THE BEN FRANKLIN EFFECT",
+    "script": "If you want someone to like you, do not do them a favor. Instead, ask them for a small favor. When their brain rationalizes helping you, it automatically concludes they must like you.",
+    "keywords": ["canyon", "nature", "river", "landscape", "sky", "horizon"]
+  },
+  {
+    "id": "T06",
+    "angle": "THE SPOTLIGHT ILLUSION",
+    "title1": "MIND HACK",
+    "title2": "THE SPOTLIGHT EFFECT",
+    "script": "Stop worrying about what others think of you. People are so consumed with their own flaws and insecurities that they only notice less than twenty percent of what you do.",
+    "keywords": ["urban", "city", "lights", "night", "street", "crowd"]
+  }
+]
