@@ -2,10 +2,11 @@ name: Daily AI Video Factory Engine
 
 on:
   schedule:
-    - cron: '30 3 * * *'
-    - cron: '30 11 * * *'
+    # 1. US Evening Peak (MMT 6:00 AM / UTC 23:30)
+    - cron: '30 23 * * *'
+    # 2. US Lunch Time (MMT 11:00 PM / UTC 16:30)
+    - cron: '30 16 * * *'
   workflow_dispatch:
-
 jobs:
   build-and-publish:
     runs-on: ubuntu-latest
