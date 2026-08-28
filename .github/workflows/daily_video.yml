@@ -7,9 +7,11 @@ on:
     # 2. US Lunch Time (MMT 11:00 PM / UTC 16:30)
     - cron: '30 16 * * *'
   workflow_dispatch:
+
 jobs:
   build-and-publish:
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
@@ -26,21 +28,16 @@ jobs:
 
       - name: Install Python Dependencies
         run: |
-          pip install -r requirements.txt
+          python -m pip install --upgrade pip
+          pip install google-generativeai requests moviepy==1.0.3 edge-tts google-auth google-auth-oauthlib google-auth-httplib2 google-api-python-client pillow numpy
 
-      - name: Run Video Engine & Auto Publish
+      - name: Run Video Generation and Multi-Platform Upload
         env:
+          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          TOKEN_PICKLE_BASE64: ${{ secrets.TOKEN_PICKLE_BASE64 }}
           TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
           TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
-          TOKEN_PICKLE_BASE64: ${{ secrets.TOKEN_PICKLE_BASE64 }}
-          GEMINI_API_KEY: ${{ secrets.GEMINI_API_KEY }}
+          FB_PAGE_ID: ${{ secrets.FB_PAGE_ID }}
+          FB_PAGE_ACCESS_TOKEN: ${{ secrets.FB_PAGE_ACCESS_TOKEN }}
         run: |
           python main.py
-
-      - name: Commit Updated Topic History
-        run: |
-          git config --global user.name 'github-actions[bot]'
-          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
-          git add database/used_history.json
-          git commit -m "Update used topics history [skip ci]" || exit 0
-          git push
