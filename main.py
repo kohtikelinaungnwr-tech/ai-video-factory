@@ -33,14 +33,17 @@ if GEMINI_API_KEY:
 # ==========================================
 def generate_content():
     print("🧠 Generating Psychology Dark Truth Script with Gemini...")
-    model = genai.GenerativeModel("gemini-1.5-flash")
+    
+    # Supported model fallbacks
+    models_to_try = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash-latest"]
+    response = None
     
     prompt = """
     Create a highly engaging, viral 30-second YouTube Short / Reel script about Dark Psychology, Human Behavior, or Mind Tricks.
-    Return ONLY a valid JSON object with the following structure:
+    Return ONLY a valid JSON object with the following structure without any extra markdown wrapper:
     {
-        "title": "A catchy, curiosity-inducing title with hashtags (e.g. 3 Dark Psychology Tricks You Must Know #shorts #mindset)",
-        "hook": "An intriguing first sentence that hooks the viewer instantly (max 10 words)",
+        "title": "Catchy title with hashtags (e.g. 3 Dark Psychology Tricks #shorts #mindset)",
+        "hook": "Intriguing first sentence that hooks the viewer instantly (max 10 words)",
         "points": [
             "Point 1: Deep psychological insight or fact",
             "Point 2: Deep psychological insight or fact",
@@ -50,10 +53,20 @@ def generate_content():
     }
     """
     
-    response = model.generate_content(prompt)
+    for m in models_to_try:
+        try:
+            model = genai.GenerativeModel(m)
+            response = model.generate_content(prompt)
+            if response and response.text:
+                print(f"✅ Successfully used model: {m}")
+                break
+        except Exception as e:
+            print(f"⚠️ Model {m} failed: {e}. Trying next...")
+
+    if not response or not response.text:
+        raise Exception("Failed to generate content from all Gemini models.")
+
     raw_text = response.text.strip()
-    
-    # Clean JSON format if markdown wraps it
     if raw_text.startswith("```json"):
         raw_text = raw_text[7:-3].strip()
     elif raw_text.startswith("```"):
@@ -67,7 +80,6 @@ def generate_content():
 # ==========================================
 async def generate_voice(text, output_audio_path="voice.mp3"):
     print("🎙️ Generating Voiceover via Edge-TTS...")
-    # Using Christopher (Deep engaging US male voice)
     voice = "en-US-ChristopherNeural"
     communicate = edge_tts.Communicate(text, voice, rate="+5%", pitch="-2Hz")
     await communicate.save(output_audio_path)
@@ -81,10 +93,8 @@ def create_video(content, audio_path, output_video_path="final_video.mp4"):
     audio = AudioFileClip(audio_path)
     duration = audio.duration + 0.5
     
-    # Background (Dark aesthetic theme)
     bg = ColorClip(size=(1080, 1920), color=(15, 15, 20), duration=duration)
     
-    # Title / Hook Header
     header_text = f"MINDSET VAULT\n{'─'*15}\n{content['hook']}"
     header_clip = TextClip(
         header_text,
@@ -96,7 +106,6 @@ def create_video(content, audio_path, output_video_path="final_video.mp4"):
         method='caption'
     ).set_position(('center', 180)).set_duration(duration)
     
-    # Spoken Points Body
     body_text = "\n\n".join(content['points'])
     body_clip = TextClip(
         body_text,
@@ -108,7 +117,6 @@ def create_video(content, audio_path, output_video_path="final_video.mp4"):
         method='caption'
     ).set_position(('center', 750)).set_duration(duration)
     
-    # Final Composition
     video = CompositeVideoClip([bg, header_clip, body_clip], size=(1080, 1920))
     video = video.set_audio(audio)
     
@@ -181,23 +189,18 @@ def send_telegram_alert(message):
 # ==========================================
 def main():
     try:
-        # Step 1: Script
         content = generate_content()
         title = content["title"]
         script = content["full_script"]
         
-        # Step 2: Audio
         audio_file = "voice.mp3"
         asyncio.run(generate_voice(script, audio_file))
         
-        # Step 3: Video
         video_file = "final_video.mp4"
         create_video(content, audio_file, video_file)
         
-        # Step 4: YouTube Upload
         yt_id = upload_to_youtube(video_file, title, script)
         
-        # Step 5: Facebook Reels Upload
         print("🚀 Initiating Facebook Reels Upload...")
         fb_success = upload_fb_reel(
             video_path=video_file,
@@ -205,7 +208,6 @@ def main():
             description=script
         )
         
-        # Step 6: Notify Telegram
         status_msg = f"🚀 AI Video Engine Completed!\n\n📌 Title: {title}\n"
         if yt_id:
             status_msg += f"✅ YouTube: https://youtu.be/{yt_id}\n"
