@@ -1,6 +1,7 @@
 import os
 import json
 import base64
+import pickle
 import random
 import asyncio
 import requests
@@ -33,8 +34,6 @@ if GEMINI_API_KEY:
 # ==========================================
 def generate_content():
     print("🧠 Generating Psychology Dark Truth Script with Gemini...")
-    
-    # Supported model fallbacks
     models_to_try = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash-latest"]
     response = None
     
@@ -140,9 +139,14 @@ def upload_to_youtube(video_path, title, description):
         
     print("📤 Uploading Video to YouTube Shorts...")
     try:
-        creds_json = base64.b64decode(TOKEN_PICKLE_BASE64).decode("utf-8")
-        creds_data = json.loads(creds_json)
-        credentials = Credentials.from_authorized_user_info(creds_data)
+        decoded_data = base64.b64decode(TOKEN_PICKLE_BASE64)
+        
+        # Try loading as Pickle first, fallback to JSON
+        try:
+            credentials = pickle.loads(decoded_data)
+        except Exception:
+            creds_data = json.loads(decoded_data.decode("utf-8"))
+            credentials = Credentials.from_authorized_user_info(creds_data)
         
         youtube = build("youtube", "v3", credentials=credentials)
         
@@ -199,8 +203,10 @@ def main():
         video_file = "final_video.mp4"
         create_video(content, audio_file, video_file)
         
+        # 1. YouTube Upload
         yt_id = upload_to_youtube(video_file, title, script)
         
+        # 2. Facebook Reels Upload
         print("🚀 Initiating Facebook Reels Upload...")
         fb_success = upload_fb_reel(
             video_path=video_file,
@@ -208,11 +214,17 @@ def main():
             description=script
         )
         
+        # 3. Notification
         status_msg = f"🚀 AI Video Engine Completed!\n\n📌 Title: {title}\n"
         if yt_id:
             status_msg += f"✅ YouTube: https://youtu.be/{yt_id}\n"
+        else:
+            status_msg += f"⚠️ YouTube: Upload Skipped / Failed\n"
+            
         if fb_success:
             status_msg += f"✅ Facebook Reel: Uploaded Successfully!\n"
+        else:
+            status_msg += f"⚠️ Facebook Reel: Upload Failed\n"
             
         send_telegram_alert(status_msg)
         print("🎉 ALL PLATFORM TASKS COMPLETED!")
