@@ -1,4 +1,5 @@
 import os
+import time
 import json
 import base64
 import pickle
@@ -30,209 +31,257 @@ if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
 
 # ==========================================
-# 2. AI SCRIPT GENERATION (GEMINI)
+# 2. TELEGRAM INTERACTIVE APPROVAL SYSTEM
+# ==========================================
+def ask_telegram_approval(title, video_path=None, timeout_seconds=600):
+    """
+    Telegram သို့ Video Preview နှင့် Inline Buttons များပို့ပြီး ၁၀ မိနစ် စောင့်ဆိုင်းပေးသော စနစ်
+    """
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        print("[Telegram] Token or Chat ID not found. Proceeding automatically.")
+        return True
+
+    base_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}"
+    
+    reply_markup = {
+        "inline_keyboard": [
+            [
+                {"text": "🚀 Publish Now", "callback_data": "publish_now"},
+                {"text": "❌ Cancel", "callback_data": "cancel_publish"}
+            ]
+        ]
+    }
+    
+    caption_text = (
+        f"🎬 *New AI Video Ready for Review!*\n\n"
+        f"📌 *Title:* {title}\n\n"
+        f"⏳ *Auto-publishing in 10 minutes unless cancelled.*"
+    )
+    
+    # Send Video Preview or Message
+    try:
+        if video_path and os.path.exists(video_path) and os.path.getsize(video_path) < 45 * 1024 * 1024:
+            with open(video_path, 'rb') as video_file:
+                requests.post(
+                    f"{base_url}/sendVideo",
+                    data={
+                        "chat_id": TELEGRAM_CHAT_ID,
+                        "caption": caption_text,
+                        "parse_mode": "Markdown",
+                        "reply_markup": json.dumps(reply_markup)
+                    },
+                    files={"video": video_file}
+                )
+        else:
+            requests.post(
+                f"{base_url}/sendMessage",
+                json={
+                    "chat_id": TELEGRAM_CHAT_ID,
+                    "text": caption_text,
+                    "parse_mode": "Markdown",
+                    "reply_markup": reply_markup
+                }
+            )
+    except Exception as e:
+        print(f"[Telegram] Failed to send preview: {e}")
+
+    print(f"[Telegram] Waiting {timeout_seconds // 60} minutes for user approval...")
+
+    start_time = time.time()
+    last_update_id = 0
+    
+    # Catch initial update ID
+    try:
+        init_updates = requests.get(f"{base_url}/getUpdates").json()
+        if init_updates.get("result"):
+            last_update_id = init_updates["result"][-1]["update_id"]
+    except Exception:
+        pass
+
+    # Polling for Button Clicks
+    while (time.time() - start_time) < timeout_seconds:
+        try:
+            res = requests.get(f"{base_url}/getUpdates", params={"offset": last_update_id + 1, "timeout": 5}).json()
+            if res.get("result"):
+                for item in res["result"]:
+                    last_update_id = item["update_id"]
+                    if "callback_query" in item:
+                        callback = item["callback_query"]
+                        data = callback.get("data")
+                        
+                        if data == "publish_now":
+                            requests.post(f"{base_url}/answerCallbackQuery", json={"callback_query_id": callback["id"], "text": "Publishing immediately!"})
+                            requests.post(f"{base_url}/sendMessage", json={"chat_id": TELEGRAM_CHAT_ID, "text": "🚀 *Approved!* Uploading now..."})
+                            return True
+                            
+                        elif data == "cancel_publish":
+                            requests.post(f"{base_url}/answerCallbackQuery", json={"callback_query_id": callback["id"], "text": "Cancelled!"})
+                            requests.post(f"{base_url}/sendMessage", json={"chat_id": TELEGRAM_CHAT_ID, "text": "❌ *Cancelled!* Video will NOT be uploaded."})
+                            return False
+        except Exception as e:
+            print(f"[Telegram Polling Error]: {e}")
+            
+        time.sleep(3)
+
+    # 10 Minutes Timeout Reached -> Auto Approve
+    requests.post(f"{base_url}/sendMessage", json={"chat_id": TELEGRAM_CHAT_ID, "text": "⏰ *10 minutes timeout reached.* Auto-publishing now..."})
+    return True
+
+def send_telegram_notification(text):
+    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
+        return
+    url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
+    try:
+        requests.post(url, json={"chat_id": TELEGRAM_CHAT_ID, "text": text, "parse_mode": "Markdown"})
+    except Exception as e:
+        print(f"[Telegram] Failed to send notification: {e}")
+
+# ==========================================
+# 3. CONTENT GENERATION (GEMINI & TTS)
 # ==========================================
 def generate_content():
-    print("🧠 Generating Psychology Dark Truth Script with Gemini...")
-    models_to_try = ["gemini-2.5-flash", "gemini-2.0-flash", "gemini-1.5-flash-latest"]
-    response = None
+    topics = [
+        "Dark Psychology and manipulation tricks people use",
+        "Body language secrets that reveal hidden feelings",
+        "Psychological tactics to instantly read anyone",
+        "Unconscious psychological hacks that influence behavior"
+    ]
+    chosen_topic = random.choice(topics)
     
-    prompt = """
-    Create a highly engaging, viral 30-second YouTube Short / Reel script about Dark Psychology, Human Behavior, or Mind Tricks.
-    Return ONLY a valid JSON object with the following structure without any extra markdown wrapper:
-    {
-        "title": "Catchy title with hashtags (e.g. 3 Dark Psychology Tricks #shorts #mindset)",
-        "hook": "Intriguing first sentence that hooks the viewer instantly (max 10 words)",
-        "points": [
-            "Point 1: Deep psychological insight or fact",
-            "Point 2: Deep psychological insight or fact",
-            "Point 3: Powerful conclusion or warning"
-        ],
-        "full_script": "The full spoken voiceover text combining the hook and points naturally."
-    }
+    prompt = f"""
+    Create an engaging 45-second YouTube Short / Reel script about: {chosen_topic}.
+    Return strictly JSON with the following schema:
+    {{
+        "title": "Catchy short title with relevant hashtags",
+        "description": "Short engaging description with hashtags #Shorts #DarkPsychology #Mindset",
+        "hook": "Attention grabbing opening sentence (max 10 words)",
+        "body": ["Point 1 explanation", "Point 2 explanation", "Point 3 explanation"],
+        "cta": "Closing call to action sentence"
+    }}
     """
-    
-    for m in models_to_try:
-        try:
-            model = genai.GenerativeModel(m)
-            response = model.generate_content(prompt)
-            if response and response.text:
-                print(f"✅ Successfully used model: {m}")
-                break
-        except Exception as e:
-            print(f"⚠️ Model {m} failed: {e}. Trying next...")
+    model = genai.GenerativeModel("gemini-2.5-flash")
+    response = model.generate_content(prompt)
+    clean_text = response.text.replace("```json", "").replace("```", "").strip()
+    return json.loads(clean_text)
 
-    if not response or not response.text:
-        raise Exception("Failed to generate content from all Gemini models.")
-
-    raw_text = response.text.strip()
-    if raw_text.startswith("```json"):
-        raw_text = raw_text[7:-3].strip()
-    elif raw_text.startswith("```"):
-        raw_text = raw_text[3:-3].strip()
-        
-    data = json.loads(raw_text)
-    return data
-
-# ==========================================
-# 3. TEXT-TO-SPEECH (EDGE-TTS)
-# ==========================================
-async def generate_voice(text, output_audio_path="voice.mp3"):
-    print("🎙️ Generating Voiceover via Edge-TTS...")
+async def generate_voice(text_script, output_audio_path="voice.mp3"):
     voice = "en-US-ChristopherNeural"
-    communicate = edge_tts.Communicate(text, voice, rate="+5%", pitch="-2Hz")
+    communicate = edge_tts.Communicate(text_script, voice, rate="+5%", pitch="+0Hz")
     await communicate.save(output_audio_path)
-    return output_audio_path
 
 # ==========================================
-# 4. VIDEO RENDERING (MOVIEPY)
+# 4. VIDEO RENDERING ENGINE
 # ==========================================
-def create_video(content, audio_path, output_video_path="final_video.mp4"):
-    print("🎬 Rendering Short/Reel Video...")
-    audio = AudioFileClip(audio_path)
-    duration = audio.duration + 0.5
+def create_short_video(content_data, audio_path, output_video_path="final_video.mp4"):
+    audio_clip = AudioFileClip(audio_path)
+    duration = audio_clip.duration
+
+    bg_clip = ColorClip(size=(1080, 1920), color=(15, 15, 20), duration=duration)
     
-    bg = ColorClip(size=(1080, 1920), color=(15, 15, 20), duration=duration)
+    full_text = f"{content_data['hook']}\n\n" + "\n\n".join(content_data['body']) + f"\n\n{content_data['cta']}"
     
-    header_text = f"MINDSET VAULT\n{'─'*15}\n{content['hook']}"
-    header_clip = TextClip(
-        header_text,
-        fontsize=48,
-        color='gold',
-        font='DejaVu-Sans-Bold',
-        align='center',
-        size=(950, None),
-        method='caption'
-    ).set_position(('center', 180)).set_duration(duration)
-    
-    body_text = "\n\n".join(content['points'])
-    body_clip = TextClip(
-        body_text,
-        fontsize=42,
-        color='white',
-        font='DejaVu-Sans',
-        align='center',
-        size=(920, None),
-        method='caption'
-    ).set_position(('center', 750)).set_duration(duration)
-    
-    video = CompositeVideoClip([bg, header_clip, body_clip], size=(1080, 1920))
-    video = video.set_audio(audio)
-    
-    video.write_videofile(
-        output_video_path,
-        fps=24,
-        codec='libx264',
-        audio_codec='aac',
-        preset='ultrafast',
-        threads=4
+    txt_clip = (
+        TextClip(full_text, fontsize=46, color='white', font='Arial-Bold', method='caption', size=(900, 1500), align='center')
+        .set_position('center')
+        .set_duration(duration)
     )
+    
+    video = CompositeVideoClip([bg_clip, txt_clip]).set_audio(audio_clip)
+    video.write_videofile(output_video_path, fps=30, codec='libx264', audio_codec='aac', preset='ultrafast')
     return output_video_path
 
 # ==========================================
-# 5. YOUTUBE SHORTS UPLOAD
+# 5. YOUTUBE UPLOADER
 # ==========================================
-def upload_to_youtube(video_path, title, description):
+def get_youtube_service():
     if not TOKEN_PICKLE_BASE64:
-        print("⚠️ TOKEN_PICKLE_BASE64 not found. Skipping YouTube upload.")
         return None
-        
-    print("📤 Uploading Video to YouTube Shorts...")
     try:
-        decoded_data = base64.b64decode(TOKEN_PICKLE_BASE64)
-        
-        # Try loading as Pickle first, fallback to JSON
+        token_bytes = base64.b64decode(TOKEN_PICKLE_BASE64)
         try:
-            credentials = pickle.loads(decoded_data)
+            creds_data = json.loads(token_bytes.decode('utf-8'))
+            creds = Credentials.from_authorized_user_info(creds_data)
         except Exception:
-            creds_data = json.loads(decoded_data.decode("utf-8"))
-            credentials = Credentials.from_authorized_user_info(creds_data)
-        
-        youtube = build("youtube", "v3", credentials=credentials)
-        
+            creds = pickle.loads(token_bytes)
+        return build('youtube', 'v3', credentials=creds)
+    except Exception as e:
+        print(f"[YouTube Auth Error]: {e}")
+        return None
+
+def upload_to_youtube(video_path, title, description):
+    youtube = get_youtube_service()
+    if not youtube:
+        return False, "Auth failed"
+    try:
         body = {
-            "snippet": {
-                "title": title[:100],
-                "description": description,
-                "tags": ["shorts", "psychology", "darkpsychology", "mindset", "facts"],
-                "categoryId": "27"
+            'snippet': {
+                'title': title[:100],
+                'description': description,
+                'tags': ['Shorts', 'DarkPsychology', 'Mindset', 'Facts'],
+                'categoryId': '22'
             },
-            "status": {
-                "privacyStatus": "public",
-                "selfDeclaredMadeForKids": False
+            'status': {
+                'privacyStatus': 'public',
+                'selfDeclaredMadeForKids': False
             }
         }
-        
-        media = MediaFileUpload(video_path, chunksize=-1, resumable=True, mimetype="video/mp4")
-        request = youtube.videos().insert(part="snippet,status", body=body, media_body=media)
-        
-        response = None
-        while response is None:
-            status, response = request.next_chunk()
-            
-        video_id = response.get("id")
-        print(f"🎉 YouTube Short Uploaded Successfully! Video URL: https://youtu.be/{video_id}")
-        return video_id
+        media = MediaFileUpload(video_path, mimetype='video/mp4', resumable=True)
+        request = youtube.videos().insert(part=','.join(body.keys()), body=body, media_body=media)
+        response = request.execute()
+        video_id = response.get('id')
+        return True, f"https://youtu.be/{video_id}"
     except Exception as e:
-        print(f"❌ YouTube Upload Error: {e}")
-        return None
+        return False, str(e)
 
 # ==========================================
-# 6. TELEGRAM NOTIFICATION
-# ==========================================
-def send_telegram_alert(message):
-    if TELEGRAM_BOT_TOKEN and TELEGRAM_CHAT_ID:
-        try:
-            url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-            requests.post(url, data={"chat_id": TELEGRAM_CHAT_ID, "text": message})
-        except Exception as e:
-            print(f"Telegram notification error: {e}")
-
-# ==========================================
-# 7. MAIN ENGINE EXECUTION
+# 6. MAIN EXECUTION PIPELINE
 # ==========================================
 def main():
+    print("🚀 [1/4] Generating AI Content...")
+    content = generate_content()
+    title = content["title"]
+    description = content["description"]
+    full_script = f"{content['hook']} {' '.join(content['body'])} {content['cta']}"
+
+    print("🎙️ [2/4] Generating Voiceover...")
+    audio_path = "voice.mp3"
+    asyncio.run(generate_voice(full_script, audio_path))
+
+    print("🎬 [3/4] Rendering Video...")
+    video_path = create_short_video(content, audio_path)
+
+    # ----------------------------------------------------
+    # TELEGRAM APPROVAL WAIT (10 Minutes Timeout)
+    # ----------------------------------------------------
+    print("⏳ [4/4] Sending Preview to Telegram & Waiting for Approval...")
+    should_publish = ask_telegram_approval(title=title, video_path=video_path, timeout_seconds=600)
+
+    if not should_publish:
+        print("❌ Workflow cancelled by user via Telegram.")
+        return
+
+    # ----------------------------------------------------
+    # PUBLISHING TO PLATFORMS
+    # ----------------------------------------------------
+    print("🚀 Publishing to YouTube Shorts...")
+    yt_success, yt_result = upload_to_youtube(video_path, title, description)
+
+    print("🚀 Publishing to Facebook Reels...")
+    fb_success, fb_result = False, "Skipped"
     try:
-        content = generate_content()
-        title = content["title"]
-        script = content["full_script"]
-        
-        audio_file = "voice.mp3"
-        asyncio.run(generate_voice(script, audio_file))
-        
-        video_file = "final_video.mp4"
-        create_video(content, audio_file, video_file)
-        
-        # 1. YouTube Upload
-        yt_id = upload_to_youtube(video_file, title, script)
-        
-        # 2. Facebook Reels Upload
-        print("🚀 Initiating Facebook Reels Upload...")
-        fb_success = upload_fb_reel(
-            video_path=video_file,
-            title=title,
-            description=script
-        )
-        
-        # 3. Notification
-        status_msg = f"🚀 AI Video Engine Completed!\n\n📌 Title: {title}\n"
-        if yt_id:
-            status_msg += f"✅ YouTube: https://youtu.be/{yt_id}\n"
-        else:
-            status_msg += f"⚠️ YouTube: Upload Skipped / Failed\n"
-            
-        if fb_success:
-            status_msg += f"✅ Facebook Reel: Uploaded Successfully!\n"
-        else:
-            status_msg += f"⚠️ Facebook Reel: Upload Failed\n"
-            
-        send_telegram_alert(status_msg)
-        print("🎉 ALL PLATFORM TASKS COMPLETED!")
-        
+        fb_success, fb_result = upload_fb_reel(video_path, description)
     except Exception as e:
-        err_msg = f"❌ Engine Failure: {str(e)}"
-        print(err_msg)
-        send_telegram_alert(err_msg)
+        fb_result = str(e)
+
+    # Final Report Notification
+    report_msg = (
+        f"🚀 *AI Video Engine Completed!*\n\n"
+        f"📌 *Title:* {title}\n"
+        f"{'✅ YouTube: ' + yt_result if yt_success else '⚠️ YouTube: ' + yt_result}\n"
+        f"{'✅ Facebook Reel: Uploaded Successfully!' if fb_success else '⚠️ Facebook Reel: ' + fb_result}"
+    )
+    send_telegram_notification(report_msg)
+    print("🎉 All tasks finished successfully!")
 
 if __name__ == "__main__":
     main()
