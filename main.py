@@ -216,7 +216,6 @@ def download_background_video(query="dark mood", output_path="bg_video.mp4"):
     return None
 
 def download_dark_bgm(output_path="bgm.mp3"):
-    """Dark Ambient BGM ကို အလိုအလျောက် Download လုပ်ခြင်း"""
     bgm_url = random.choice(DARK_BGM_URLS)
     try:
         print("[BGM] Downloading Dark Ambient Background Music...")
@@ -274,7 +273,7 @@ def create_engaging_short(content_data, voice_path, bg_video_path=None, bgm_path
             bg_clip = (
                 raw_bg.resize(scale)
                 .crop(x_center=raw_bg.resize(scale).w / 2, y_center=raw_bg.resize(scale).h / 2, width=1080, height=1920)
-                .fx(vfx.colorx, 0.75)  # <-- မမှောင်စေရန် 0.75 သို့ မြှင့်ထားပါသည်
+                .fx(vfx.colorx, 0.75)
             )
         except Exception as e:
             print(f"[Video Fit Error]: {e}")
@@ -307,36 +306,20 @@ def create_engaging_short(content_data, voice_path, bg_video_path=None, bgm_path
         txt = (
             TextClip(
                 section_text.upper(),
-                fontsize=68,           # <-- စာလုံးဆိုဒ်ကို 68 သို့ တင်ထားပါသည်
+                fontsize=68,
                 color=font_color,
                 font='Liberation-Sans-Bold',
                 method='caption',
                 size=(920, 400),
                 align='center',
                 stroke_color='black',
-                stroke_width=5         # <-- အနက်ရောင် ဘေးဘောင်လိုင်းကို 5 အထိ ထူထားပါသည်
+                stroke_width=5
             )
             .set_start(current_time)
             .set_duration(time_per_section)
             .set_position(('center', 'center'))
         )
-        clips.extend([pill_box, txt])
-        current_time += time_per_section
-
-    final_video = CompositeVideoClip(clips, size=(1080, 1920)).set_audio(final_audio)
-    final_video.write_videofile(
-        output_path,
-        fps=30,
-        codec='libx264',
-        audio_codec='aac',
-        preset='ultrafast',
-        threads=4
-    )
-    return output_path
-            .set_start(current_time)
-            .set_duration(time_per_section)
-            .set_position(('center', 'center'))
-        )
+        
         clips.extend([pill_box, txt])
         current_time += time_per_section
 
