@@ -1,6 +1,8 @@
+google-generativeai
+edge-tts
+moviepy==1.0.3
 google-api-python-client
 google-auth-httplib2
 google-auth-oauthlib
 requests
-edge-tts
-google-genai
+facebook-sdk
