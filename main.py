@@ -34,11 +34,10 @@ if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
 
 # ==========================================
-# 2. TELEGRAM APPROVAL SYSTEM
+# 2. TELEGRAM INTERACTIVE APPROVAL SYSTEM
 # ==========================================
 def ask_telegram_approval(title, video_path=None, timeout_seconds=600):
     if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
-        print("[Telegram] Config missing. Auto-proceeding.")
         return True
 
     base_url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}"
@@ -123,7 +122,7 @@ def send_telegram_notification(text):
     requests.post(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage", json={"chat_id": TELEGRAM_CHAT_ID, "text": text, "parse_mode": "Markdown"})
 
 # ==========================================
-# 3. CONTENT & PEXELS VIDEO DOWNLOADER
+# 3. AI SCRIPT & PEXELS FETCHER
 # ==========================================
 def generate_content():
     topics = [
@@ -135,15 +134,15 @@ def generate_content():
     chosen_topic = random.choice(topics)
     
     prompt = f"""
-    Create an engaging 35-second viral YouTube Short / Reel script about: {chosen_topic}.
+    Create a highly viral 35-second YouTube Short / Reel script about: {chosen_topic}.
     Return strictly JSON schema:
     {{
         "title": "Short viral title with hashtags",
         "description": "Engaging description with #Shorts #DarkPsychology",
-        "search_query": "Single search keyword for dark background video (e.g., 'dark mystery', 'cinematic rain', 'shadows', 'cyberpunk city')",
-        "hook": "Extreme hook sentence (max 8 words)",
+        "search_query": "Single search keyword (e.g. 'dark mystery', 'neon shadows', 'cyberpunk rain', 'night city')",
+        "hook": "Extreme hook sentence (max 7 words)",
         "body": ["Point 1 concise line", "Point 2 concise line", "Point 3 concise line"],
-        "cta": "Follow for more psychology secrets."
+        "cta": "Follow for more psychological insights."
     }}
     """
     model = genai.GenerativeModel("gemini-2.5-flash")
@@ -151,17 +150,16 @@ def generate_content():
     clean_text = response.text.replace("```json", "").replace("```", "").strip()
     return json.loads(clean_text)
 
-def download_background_video(query="dark cinematic", output_path="bg_video.mp4"):
-    """Pexels API မှ 9:16 Vertical Dark Background Video ကို Download လုပ်ခြင်း"""
+def download_background_video(query="dark mystery", output_path="bg_video.mp4"):
     if not PEXELS_API_KEY:
-        print("[Pexels] No API Key found, using fallback background.")
+        print("[Pexels] PEXELS_API_KEY not found in environment!")
         return None
         
     headers = {"Authorization": PEXELS_API_KEY}
-    url = f"https://api.pexels.com/videos/search?query={query}&orientation=portrait&per_page=10"
+    url = f"https://api.pexels.com/videos/search?query={query}&orientation=portrait&per_page=15"
     
     try:
-        r = requests.get(url, headers=headers, timeout=10)
+        r = requests.get(url, headers=headers, timeout=12)
         data = r.json()
         videos = data.get("videos", [])
         if not videos:
@@ -175,8 +173,8 @@ def download_background_video(query="dark cinematic", output_path="bg_video.mp4"
             hd_file = video_files[0]
             
         if hd_file:
-            print(f"[Pexels] Downloading video from {hd_file['link']}...")
-            v_res = requests.get(hd_file["link"], stream=True, timeout=20)
+            print(f"[Pexels] Downloading background video from {hd_file['link']}...")
+            v_res = requests.get(hd_file["link"], stream=True, timeout=25)
             with open(output_path, "wb") as f:
                 for chunk in v_res.iter_content(chunk_size=1024*1024):
                     f.write(chunk)
@@ -187,7 +185,7 @@ def download_background_video(query="dark cinematic", output_path="bg_video.mp4"
 
 async def generate_voice(text_script, output_audio_path="voice.mp3"):
     voice = "en-US-ChristopherNeural"
-    communicate = edge_tts.Communicate(text_script, voice, rate="+6%", pitch="+0Hz")
+    communicate = edge_tts.Communicate(text_script, voice, rate="+7%", pitch="+0Hz")
     await communicate.save(output_audio_path)
 
 # ==========================================
@@ -197,7 +195,7 @@ def create_engaging_short(content_data, audio_path, bg_video_path=None, output_p
     audio_clip = AudioFileClip(audio_path)
     total_duration = audio_clip.duration
 
-    # Background Setup
+    # Background Video Setup
     if bg_video_path and os.path.exists(bg_video_path):
         raw_bg = VideoFileClip(bg_video_path)
         if raw_bg.duration < total_duration:
@@ -208,41 +206,50 @@ def create_engaging_short(content_data, audio_path, bg_video_path=None, output_p
             raw_bg.subclip(0, total_duration)
             .resize(height=1920)
             .crop(x_center=raw_bg.w / 2, y_center=raw_bg.h / 2, width=1080, height=1920)
-            .fx(vfx.colorx, 0.45)  # Darken for contrast
+            .fx(vfx.colorx, 0.40) # Darken background to make text readable
         )
     else:
-        bg_clip = ColorClip(size=(1080, 1920), color=(10, 10, 15), duration=total_duration)
+        # Fallback stylish dark gradient background
+        bg_clip = ColorClip(size=(1080, 1920), color=(12, 12, 18), duration=total_duration)
 
-    # Dynamic Timed Subtitles
     sections = [content_data["hook"]] + content_data["body"] + [content_data["cta"]]
     time_per_section = total_duration / len(sections)
     
-    text_clips = []
+    text_and_bg_clips = []
     current_time = 0.0
 
     for i, section_text in enumerate(sections):
-        font_color = '#FFE600' if i == 0 else '#FFFFFF'  # Yellow Hook
+        font_color = '#FFE600' if i == 0 else '#FFFFFF' # Hook is Gold-Yellow
         
+        # Semi-transparent dark pill behind text for high readability
+        box_bg = (
+            ColorClip(size=(960, 420), color=(0, 0, 0), duration=time_per_section)
+            .set_opacity(0.65)
+            .set_start(current_time)
+            .set_position(('center', 'center'))
+        )
+        
+        # Text
         txt = (
             TextClip(
                 section_text.upper(),
-                fontsize=58,
+                fontsize=52,
                 color=font_color,
-                font='Arial-Bold',
+                font='Liberation-Sans-Bold',
                 method='caption',
-                size=(920, 900),
+                size=(900, 380),
                 align='center',
                 stroke_color='black',
-                stroke_width=3
+                stroke_width=2
             )
             .set_start(current_time)
             .set_duration(time_per_section)
             .set_position(('center', 'center'))
         )
-        text_clips.append(txt)
+        text_and_bg_clips.extend([box_bg, txt])
         current_time += time_per_section
 
-    final_video = CompositeVideoClip([bg_clip, *text_clips], size=(1080, 1920)).set_audio(audio_clip)
+    final_video = CompositeVideoClip([bg_clip, *text_and_bg_clips], size=(1080, 1920)).set_audio(audio_clip)
     final_video.write_videofile(
         output_path,
         fps=30,
@@ -295,17 +302,17 @@ def upload_to_youtube(video_path, title, description):
         return False, str(e)
 
 # ==========================================
-# 6. MAIN EXECUTION PIPELINE
+# 6. MAIN PIPELINE
 # ==========================================
 def main():
-    print("🚀 [1/5] Generating Viral Script & Topic via Gemini...")
+    print("🚀 [1/5] Generating Viral Script via Gemini...")
     content = generate_content()
     title = content["title"]
     description = content["description"]
     search_query = content.get("search_query", "dark mystery")
     full_script = f"{content['hook']} {' '.join(content['body'])} {content['cta']}"
 
-    print(f"🎬 [2/5] Downloading Background Video for '{search_query}'...")
+    print(f"🎬 [2/5] Downloading Pexels Video for '{search_query}'...")
     bg_video = download_background_video(search_query)
 
     print("🎙️ [3/5] Generating Voiceover...")
@@ -315,11 +322,11 @@ def main():
     print("🎨 [4/5] Rendering High-Retention Dynamic Short...")
     video_path = create_engaging_short(content, audio_path, bg_video_path=bg_video)
 
-    print("⏳ [5/5] Sending Preview to Telegram & Waiting for Approval (10 mins)...")
+    print("⏳ [5/5] Sending Preview to Telegram & Waiting for Approval...")
     should_publish = ask_telegram_approval(title=title, video_path=video_path, timeout_seconds=600)
 
     if not should_publish:
-        print("❌ Workflow cancelled by user via Telegram.")
+        print("❌ Cancelled by user via Telegram.")
         return
 
     print("🚀 Publishing to YouTube Shorts...")
