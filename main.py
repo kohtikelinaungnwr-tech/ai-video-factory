@@ -122,20 +122,19 @@ def generate_content():
     ]
     chosen_topic = random.choice(topics)
     
-    # Script ပိုရှည်စေရန် Point ၄ ခု တောင်းထားပါသည် (ဗီဒီယိုကြာချိန် ၃၅ - ၄၅ စက္ကန့်ဝန်းကျင်)
+    # 60 စက္ကန့်အတွင်း ဝင်စေရန်နှင့် အကြောင်းအရာ ပိုမိုထိရောက်စေရန် စာလုံးရေကန့်သတ်ထားပါသည်
     prompt = f"""
-    Create a highly engaging 40-second viral YouTube Short / Reel script about: {chosen_topic}.
+    Create a highly engaging 45-second viral YouTube Short / Reel script about: {chosen_topic}.
     Return strictly JSON format:
     {{
         "title": "Short viral title with hashtags",
         "description": "Engaging description with #Shorts #DarkPsychology #Mindset",
-        "search_query": "dark moody shadows night city aesthetic",
-        "hook": "Extreme hook sentence (max 8 words)",
+        "search_query": "dark moody night city rain aesthetic",
+        "hook": "Extreme hook sentence (max 6 words)",
         "body": [
-            "Point 1 with a clear, detailed psychological explanation", 
-            "Point 2 with a clear, detailed psychological explanation", 
-            "Point 3 with a clear, detailed psychological explanation",
-            "Point 4 showing a mind-blowing final fact"
+            "Point 1 in short, punchy, high-impact sentences (max 15 words)", 
+            "Point 2 in short, punchy, high-impact sentences (max 15 words)", 
+            "Point 3 in short, punchy, high-impact sentences (max 15 words)"
         ],
         "cta": "Follow for daily psychology hacks."
     }}
@@ -197,7 +196,7 @@ def download_dark_bgm(output_path="bgm.mp3"):
         return None
 
 async def generate_voice(text_script, output_audio_path="voice.mp3"):
-    # စကားပြောအမြန်နှုန်းကို ပုံမှန် (+0%) တွင်ထားသဖြင့် နားထောင်ရ ပိုမိုရှင်းလင်းပြီး ကြာချိန်ပိုရပါမည်
+    # စကားပြောအမြန်နှုန်း ပုံမှန်အတိုင်းထားပါသည်
     communicate = edge_tts.Communicate(text_script, "en-US-ChristopherNeural", rate="+0%", pitch="+0Hz")
     await communicate.save(output_audio_path)
 
@@ -220,7 +219,6 @@ def create_engaging_short(content_data, voice_path, bg_video_path=None, bgm_path
 
     final_audio = CompositeAudioClip(audio_clips)
 
-    # Background Setup (Brightness 1.05 for clearer visibility)
     if bg_video_path and os.path.exists(bg_video_path):
         try:
             raw_bg = VideoFileClip(bg_video_path)
@@ -236,7 +234,7 @@ def create_engaging_short(content_data, voice_path, bg_video_path=None, bgm_path
 
     clips = [bg_clip]
     
-    # 1. MINDSET VAULT Watermarks (Top & Bottom)
+    # 1. MINDSET VAULT Watermarks
     wm_top = (
         TextClip("MINDSET VAULT", fontsize=45, color='white', font='Liberation-Sans-Bold', stroke_color='black', stroke_width=2)
         .set_opacity(0.35)
