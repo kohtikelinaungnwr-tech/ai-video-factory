@@ -125,7 +125,6 @@ def send_telegram_notification(text):
 # 3. AI SCRIPT & PEXELS FETCHER
 # ==========================================
 def generate_content():
-   def generate_content():
     topics = [
         "Dark Psychology and covert manipulation tricks",
         "Body language secrets that reveal hidden feelings",
@@ -147,17 +146,27 @@ def generate_content():
     }}
     """
     
-    # Auto-fallback to working Gemini models
-    for m_name in ["gemini-2.0-flash", "gemini-1.5-flash", "models/gemini-1.5-flash"]:
-        try:
-            model = genai.GenerativeModel(m_name)
-            response = model.generate_content(prompt)
-            clean_text = response.text.replace("```json", "").replace("```", "").strip()
-            return json.loads(clean_text)
-        except Exception as e:
-            print(f"[Gemini] Failed with {m_name}, trying next: {e}")
-            
-    raise RuntimeError("All Gemini model attempts failed.")
+    # Auto-detect available Gemini model dynamically
+    selected_model_name = None
+    try:
+        for m in genai.list_models():
+            if 'generateContent' in m.supported_generation_methods:
+                if 'flash' in m.name:
+                    selected_model_name = m.name
+                    break
+                elif not selected_model_name and 'gemini' in m.name:
+                    selected_model_name = m.name
+    except Exception as e:
+        print(f"[Gemini List Models Error]: {e}")
+
+    if not selected_model_name:
+        selected_model_name = "models/gemini-1.5-flash"
+
+    print(f"[Gemini] Using active model: {selected_model_name}")
+    model = genai.GenerativeModel(selected_model_name)
+    response = model.generate_content(prompt)
+    clean_text = response.text.replace("```json", "").replace("```", "").strip()
+    return json.loads(clean_text)
 
 def download_background_video(query="dark aesthetic", output_path="bg_video.mp4"):
     if not PEXELS_API_KEY:
