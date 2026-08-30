@@ -251,7 +251,6 @@ def create_engaging_short(content_data, voice_path, bg_video_path=None, bgm_path
             else:
                 bgm_clip = bgm_clip.subclip(0, total_duration)
             
-            # Set BGM to 18% volume so voice is perfectly clear
             bgm_clip = bgm_clip.volumex(0.18)
             audio_clips.append(bgm_clip)
         except Exception as e:
@@ -259,7 +258,7 @@ def create_engaging_short(content_data, voice_path, bg_video_path=None, bgm_path
 
     final_audio = CompositeAudioClip(audio_clips)
 
-    # Background Video Setup (Full Screen 1080x1920 Cover)
+    # Background Video Setup (Brighter & Crisp: 0.75 Brightness)
     if bg_video_path and os.path.exists(bg_video_path):
         try:
             raw_bg = VideoFileClip(bg_video_path)
@@ -268,8 +267,6 @@ def create_engaging_short(content_data, voice_path, bg_video_path=None, bgm_path
                 raw_bg = raw_bg.fx(vfx.loop, n=loops)
                 
             raw_bg = raw_bg.subclip(0, total_duration)
-            
-            # Aspect ratio calculation for perfect cover fill
             scale_w = 1080 / raw_bg.w
             scale_h = 1920 / raw_bg.h
             scale = max(scale_w, scale_h)
@@ -277,7 +274,7 @@ def create_engaging_short(content_data, voice_path, bg_video_path=None, bgm_path
             bg_clip = (
                 raw_bg.resize(scale)
                 .crop(x_center=raw_bg.resize(scale).w / 2, y_center=raw_bg.resize(scale).h / 2, width=1080, height=1920)
-                .fx(vfx.colorx, 0.45)
+                .fx(vfx.colorx, 0.75)  # <-- မမှောင်စေရန် 0.75 သို့ မြှင့်ထားပါသည်
             )
         except Exception as e:
             print(f"[Video Fit Error]: {e}")
@@ -285,7 +282,7 @@ def create_engaging_short(content_data, voice_path, bg_video_path=None, bgm_path
     else:
         bg_clip = ColorClip(size=(1080, 1920), color=(14, 14, 22), duration=total_duration)
 
-    # Viral Dynamic Subtitles
+    # Viral Dynamic Subtitles (Extra Bold, Size 68, Stroke 5)
     sections = [content_data["hook"]] + content_data["body"] + [content_data["cta"]]
     time_per_section = total_duration / len(sections)
     
@@ -294,15 +291,15 @@ def create_engaging_short(content_data, voice_path, bg_video_path=None, bgm_path
 
     for i, section_text in enumerate(sections):
         if i == 0:
-            font_color = '#FFE600' # Yellow Hook
+            font_color = '#FFE600'  # Yellow Hook
         elif i == len(sections) - 1:
-            font_color = '#00FFFF' # Cyan CTA
+            font_color = '#00F2FE'  # Electric Cyan CTA
         else:
-            font_color = '#FFFFFF' # White Body
+            font_color = '#FFFFFF'  # Crisp White Body
         
         pill_box = (
-            ColorClip(size=(960, 420), color=(0, 0, 0), duration=time_per_section)
-            .set_opacity(0.60)
+            ColorClip(size=(960, 440), color=(0, 0, 0), duration=time_per_section)
+            .set_opacity(0.55)
             .set_start(current_time)
             .set_position(('center', 'center'))
         )
@@ -310,15 +307,32 @@ def create_engaging_short(content_data, voice_path, bg_video_path=None, bgm_path
         txt = (
             TextClip(
                 section_text.upper(),
-                fontsize=58,
+                fontsize=68,           # <-- စာလုံးဆိုဒ်ကို 68 သို့ တင်ထားပါသည်
                 color=font_color,
                 font='Liberation-Sans-Bold',
                 method='caption',
-                size=(900, 380),
+                size=(920, 400),
                 align='center',
                 stroke_color='black',
-                stroke_width=3
+                stroke_width=5         # <-- အနက်ရောင် ဘေးဘောင်လိုင်းကို 5 အထိ ထူထားပါသည်
             )
+            .set_start(current_time)
+            .set_duration(time_per_section)
+            .set_position(('center', 'center'))
+        )
+        clips.extend([pill_box, txt])
+        current_time += time_per_section
+
+    final_video = CompositeVideoClip(clips, size=(1080, 1920)).set_audio(final_audio)
+    final_video.write_videofile(
+        output_path,
+        fps=30,
+        codec='libx264',
+        audio_codec='aac',
+        preset='ultrafast',
+        threads=4
+    )
+    return output_path
             .set_start(current_time)
             .set_duration(time_per_section)
             .set_position(('center', 'center'))
