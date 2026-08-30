@@ -145,7 +145,7 @@ def generate_content():
         "cta": "Follow for daily psychology hacks."
     }}
     """
-    model = genai.GenerativeModel("gemini-1.5-flash")
+    model = genai.GenerativeModel("gemini-1.5-flash-latest")
     response = model.generate_content(prompt)
     clean_text = response.text.replace("```json", "").replace("```", "").strip()
     return json.loads(clean_text)
