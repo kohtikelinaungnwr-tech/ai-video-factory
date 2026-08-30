@@ -125,6 +125,7 @@ def send_telegram_notification(text):
 # 3. AI SCRIPT & PEXELS FETCHER
 # ==========================================
 def generate_content():
+   def generate_content():
     topics = [
         "Dark Psychology and covert manipulation tricks",
         "Body language secrets that reveal hidden feelings",
@@ -145,10 +146,18 @@ def generate_content():
         "cta": "Follow for daily psychology hacks."
     }}
     """
-    model = genai.GenerativeModel("gemini-2.0-flash")
-    response = model.generate_content(prompt)
-    clean_text = response.text.replace("```json", "").replace("```", "").strip()
-    return json.loads(clean_text)
+    
+    # Auto-fallback to working Gemini models
+    for m_name in ["gemini-2.0-flash", "gemini-1.5-flash", "models/gemini-1.5-flash"]:
+        try:
+            model = genai.GenerativeModel(m_name)
+            response = model.generate_content(prompt)
+            clean_text = response.text.replace("```json", "").replace("```", "").strip()
+            return json.loads(clean_text)
+        except Exception as e:
+            print(f"[Gemini] Failed with {m_name}, trying next: {e}")
+            
+    raise RuntimeError("All Gemini model attempts failed.")
 
 def download_background_video(query="dark aesthetic", output_path="bg_video.mp4"):
     if not PEXELS_API_KEY:
