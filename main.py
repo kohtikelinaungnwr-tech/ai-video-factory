@@ -336,8 +336,14 @@ def main():
     
     fb_success, fb_result = False, "Skipped"
     try:
-        fb_success, fb_result = upload_fb_reel(video_path, content["description"])
+        result = upload_fb_reel(video_path, content["description"])
+        if isinstance(result, tuple) and len(result) == 2:
+            fb_success, fb_result = result
+        else:
+            fb_success = bool(result)
+            fb_result = "Uploaded Successfully!" if fb_success else "Upload Failed"
     except Exception as e:
+        fb_success = False
         fb_result = str(e)
 
     report_msg = f"🚀 *Completed!*\n📌 *Title:* {content['title']}\n{'✅ YT: ' + yt_result if yt_success else '⚠️ YT: ' + yt_result}\n{'✅ FB: Uploaded!' if fb_success else '⚠️ FB: ' + fb_result}"
