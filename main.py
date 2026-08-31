@@ -132,9 +132,9 @@ def generate_content():
         "search_query": "dark moody night city rain aesthetic",
         "hook": "Extreme hook sentence (max 6 words)",
         "body": [
-            "Point 1 in short, punchy, high-impact sentences (max 15 words)", 
-            "Point 2 in short, punchy, high-impact sentences (max 15 words)", 
-            "Point 3 in short, punchy, high-impact sentences (max 15 words)"
+            "Point 1 in short, punchy, high-impact sentences (max 25 words)", 
+            "Point 2 in short, punchy, high-impact sentences (max 25 words)", 
+            "Point 3 in short, punchy, high-impact sentences (max 25 words)"
         ],
         "cta": "Follow for daily psychology hacks."
     }}
@@ -170,7 +170,6 @@ def generate_content():
                 raise RuntimeError("Failed to generate content after maximum retries.")
 
 def download_background_videos(query="dark mood", count=3):
-    """ နောက်ခံဗီဒီယို (၃) ခုကို Pexels မှ အလိုအလျောက် ရှာဖွေ ဒေါင်းလုဒ်ဆွဲမည့် စနစ် """
     if not PEXELS_API_KEY:
         return []
         
