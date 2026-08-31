@@ -15,6 +15,7 @@ from moviepy.editor import (
     CompositeAudioClip,
     TextClip,
     ColorClip,
+    concatenate_videoclips,
     vfx
 )
 from google.oauth2.credentials import Credentials
@@ -110,7 +111,7 @@ def send_telegram_notification(text):
     requests.post(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage", json={"chat_id": TELEGRAM_CHAT_ID, "text": text, "parse_mode": "Markdown"})
 
 # ==========================================
-# 3. AI SCRIPT, VIDEO & BGM FETCHER
+# 3. AI SCRIPT, MULTI-VIDEO & BGM FETCHER
 # ==========================================
 def generate_content():
     topics = [
@@ -122,7 +123,6 @@ def generate_content():
     ]
     chosen_topic = random.choice(topics)
     
-    # 60 စက္ကန့်အတွင်း ဝင်စေရန်နှင့် အကြောင်းအရာ ပိုမိုထိရောက်စေရန် စာလုံးရေကန့်သတ်ထားပါသည်
     prompt = f"""
     Create a highly engaging 45-second viral YouTube Short / Reel script about: {chosen_topic}.
     Return strictly JSON format:
@@ -143,12 +143,9 @@ def generate_content():
     selected_model_name = None
     try:
         for m in genai.list_models():
-            if 'generateContent' in m.supported_generation_methods:
-                if 'flash' in m.name:
-                    selected_model_name = m.name
-                    break
-                elif not selected_model_name and 'gemini' in m.name:
-                    selected_model_name = m.name
+            if 'generateContent' in m.supported_generation_methods and 'flash' in m.name:
+                selected_model_name = m.name
+                break
     except Exception:
         pass
 
@@ -156,35 +153,53 @@ def generate_content():
         selected_model_name = "models/gemini-1.5-flash"
 
     model = genai.GenerativeModel(selected_model_name)
-    response = model.generate_content(prompt)
-    clean_text = response.text.replace("```json", "").replace("```", "").strip()
-    return json.loads(clean_text)
+    
+    # Auto-Retry for Gemini Rate Limit
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            response = model.generate_content(prompt)
+            clean_text = response.text.replace("```json", "").replace("```", "").strip()
+            return json.loads(clean_text)
+        except Exception as e:
+            print(f"[Gemini API Error] Attempt {attempt + 1} failed: {e}")
+            if attempt < max_retries - 1:
+                print("⏳ Rate limit reached. Waiting 20 seconds before retrying...")
+                time.sleep(20)
+            else:
+                raise RuntimeError("Failed to generate content after maximum retries.")
 
-def download_background_video(query="dark mood", output_path="bg_video.mp4"):
+def download_background_videos(query="dark mood", count=3):
+    """ နောက်ခံဗီဒီယို (၃) ခုကို Pexels မှ အလိုအလျောက် ရှာဖွေ ဒေါင်းလုဒ်ဆွဲမည့် စနစ် """
     if not PEXELS_API_KEY:
-        return None
+        return []
         
     headers = {"Authorization": PEXELS_API_KEY.strip()}
-    search_terms = [query, "dark shadows", "moody night", "rain cinematic", "abstract dark neon"]
+    search_terms = [query, "dark shadows", "moody night cinematic", "rain cinematic", "dark neon"]
+    downloaded_paths = []
     
     for term in search_terms:
+        if len(downloaded_paths) >= count: break
         try:
             url = f"https://api.pexels.com/videos/search?query={term}&orientation=portrait&per_page=15"
             r = requests.get(url, headers=headers, timeout=12)
             videos = r.json().get("videos", [])
+            random.shuffle(videos)
             
-            if videos:
-                chosen_video = random.choice(videos)
-                for vf in chosen_video.get("video_files", []):
+            for v in videos:
+                if len(downloaded_paths) >= count: break
+                for vf in v.get("video_files", []):
                     if vf.get("file_type") == "video/mp4" and vf.get("link") and vf.get("height", 0) >= 1280:
+                        out_path = f"bg_video_{len(downloaded_paths)}.mp4"
                         v_res = requests.get(vf["link"], stream=True, timeout=30)
-                        with open(output_path, "wb") as f:
+                        with open(out_path, "wb") as f:
                             for chunk in v_res.iter_content(chunk_size=1024 * 1024):
                                 if chunk: f.write(chunk)
-                        return output_path
+                        downloaded_paths.append(out_path)
+                        break 
         except Exception:
             continue
-    return None
+    return downloaded_paths
 
 def download_dark_bgm(output_path="bgm.mp3"):
     bgm_url = random.choice(DARK_BGM_URLS)
@@ -196,17 +211,17 @@ def download_dark_bgm(output_path="bgm.mp3"):
         return None
 
 async def generate_voice(text_script, output_audio_path="voice.mp3"):
-    # စကားပြောအမြန်နှုန်း ပုံမှန်အတိုင်းထားပါသည်
     communicate = edge_tts.Communicate(text_script, "en-US-ChristopherNeural", rate="+0%", pitch="+0Hz")
     await communicate.save(output_audio_path)
 
 # ==========================================
-# 4. VIRAL RETENTION VIDEO COMPOSER
+# 4. VIRAL RETENTION MULTI-SCENE COMPOSER
 # ==========================================
-def create_engaging_short(content_data, voice_path, bg_video_path=None, bgm_path=None, output_path="final_video.mp4"):
+def create_engaging_short(content_data, voice_path, bg_video_paths=[], bgm_path=None, output_path="final_video.mp4"):
     voice_clip = AudioFileClip(voice_path)
     total_duration = voice_clip.duration
 
+    # Audio Mixing
     audio_clips = [voice_clip]
     if bgm_path and os.path.exists(bgm_path):
         try:
@@ -219,15 +234,25 @@ def create_engaging_short(content_data, voice_path, bg_video_path=None, bgm_path
 
     final_audio = CompositeAudioClip(audio_clips)
 
-    if bg_video_path and os.path.exists(bg_video_path):
-        try:
-            raw_bg = VideoFileClip(bg_video_path)
-            loops = int(total_duration / raw_bg.duration) + 1 if raw_bg.duration < total_duration else 1
-            raw_bg = raw_bg.fx(vfx.loop, n=loops).subclip(0, total_duration)
-            
-            scale = max(1080 / raw_bg.w, 1920 / raw_bg.h)
-            bg_clip = raw_bg.resize(scale).crop(x_center=raw_bg.resize(scale).w / 2, y_center=raw_bg.resize(scale).h / 2, width=1080, height=1920).fx(vfx.colorx, 1.05)
-        except Exception:
+    # Multi-Scene Background Setup
+    if bg_video_paths and isinstance(bg_video_paths, list) and len(bg_video_paths) > 0:
+        segment_duration = total_duration / len(bg_video_paths)
+        bg_clips = []
+        for path in bg_video_paths:
+            if os.path.exists(path):
+                try:
+                    raw_bg = VideoFileClip(path)
+                    loops = int(segment_duration / raw_bg.duration) + 1 if raw_bg.duration < segment_duration else 1
+                    clip = raw_bg.fx(vfx.loop, n=loops).subclip(0, segment_duration)
+                    scale = max(1080 / clip.w, 1920 / clip.h)
+                    clip = clip.resize(scale).crop(x_center=clip.resize(scale).w / 2, y_center=clip.resize(scale).h / 2, width=1080, height=1920).fx(vfx.colorx, 1.05)
+                    bg_clips.append(clip)
+                except Exception as e:
+                    print(f"Error processing {path}: {e}")
+        
+        if bg_clips:
+            bg_clip = concatenate_videoclips(bg_clips, method="compose").subclip(0, total_duration)
+        else:
             bg_clip = ColorClip(size=(1080, 1920), color=(14, 14, 22), duration=total_duration)
     else:
         bg_clip = ColorClip(size=(1080, 1920), color=(14, 14, 22), duration=total_duration)
@@ -315,8 +340,8 @@ def main():
     print("🚀 [1/6] Generating Content...")
     content = generate_content()
     
-    print("🎬 [2/6] Fetching Background Video...")
-    bg_video = download_background_video(content.get("search_query", "dark moody shadows"))
+    print("🎬 [2/6] Fetching Multi-Scene Background Videos...")
+    bg_videos = download_background_videos(content.get("search_query", "dark moody shadows"), count=3)
 
     print("🎵 [3/6] Fetching BGM...")
     bgm_path = download_dark_bgm()
@@ -324,8 +349,8 @@ def main():
     print("🎙️ [4/6] Generating Voiceover...")
     asyncio.run(generate_voice(f"{content['hook']} {' '.join(content['body'])} {content['cta']}", "voice.mp3"))
 
-    print("🎨 [5/6] Rendering Video...")
-    video_path = create_engaging_short(content, "voice.mp3", bg_video, bgm_path)
+    print("🎨 [5/6] Rendering Multi-Scene Video...")
+    video_path = create_engaging_short(content, "voice.mp3", bg_video_paths=bg_videos, bgm_path=bgm_path)
 
     print("⏳ [6/6] Telegram Approval...")
     if not ask_telegram_approval(content["title"], video_path, 600):
@@ -346,7 +371,7 @@ def main():
         fb_success = False
         fb_result = str(e)
 
-    report_msg = f"🚀 *Completed!*\n📌 *Title:* {content['title']}\n{'✅ YT: ' + yt_result if yt_success else '⚠️ YT: ' + yt_result}\n{'✅ FB: Uploaded!' if fb_success else '⚠️ FB: ' + fb_result}"
+    report_msg = f"🚀 *Completed!*\n📌 *Title:* {content['title']}\n{'✅ YT: ' + yt_result if yt_success else '⚠️ YT: ' + yt_result}\n{'✅ FB: ' + fb_result if fb_success else '⚠️ FB: ' + fb_result}"
     send_telegram_notification(report_msg)
     print("🎉 Done!")
 
