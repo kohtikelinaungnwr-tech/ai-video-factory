@@ -41,6 +41,10 @@ DARK_BGM_URLS = [
     "https://cdn.pixabay.com/download/audio/2022/01/18/audio_d0a13f69d2.mp3?filename=dark-ambient-10943.mp3"
 ]
 
+# --- ADDED: Policy Compliance Blacklist ---
+BLOCKED_KEYWORDS = ["manipulate", "destroy", "control people", "coercion", "force someone", "dominance", "threat", "harm"]
+MAX_VIDEO_DURATION = 58.0 # Maximum duration for Shorts (in seconds)
+
 # ==========================================
 # 2. TELEGRAM INTERACTIVE APPROVAL (10 Mins)
 # ==========================================
@@ -110,25 +114,35 @@ def send_telegram_notification(text):
         return
     requests.post(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage", json={"chat_id": TELEGRAM_CHAT_ID, "text": text, "parse_mode": "Markdown"})
 
+
+# --- ADDED: Function to check Policy Keywords ---
+def is_content_safe(text_to_check):
+    text_lower = text_to_check.lower()
+    for word in BLOCKED_KEYWORDS:
+        if word in text_lower:
+            print(f"⚠️ Policy Warning: Blocked keyword '{word}' detected. Regenerating...")
+            return False
+    return True
+
 # ==========================================
 # 3. AI SCRIPT, MULTI-VIDEO & BGM FETCHER
 # ==========================================
 def generate_content():
     topics = [
-        "Dark Psychology and covert manipulation tricks",
+        "Dark Psychology facts (Safe influence tactics)",
         "Body language secrets that reveal hidden feelings",
-        "Psychological tactics to instantly read anyone",
-        "Unconscious psychological hacks that influence behavior",
-        "Subtle ways to assert dominance in any conversation"
+        "Psychological tactics to read anyone instantly",
+        "Unconscious psychological hacks to build confidence",
+        "Subtle ways to assert presence in any conversation"
     ]
-    chosen_topic = random.choice(topics)
     
-    prompt = f"""
-    Create a highly engaging 45-second viral YouTube Short / Reel script about: {chosen_topic}.
+    prompt_template = """
+    Create a highly engaging 45-second viral YouTube Short / Reel script about: {topic}.
+    IMPORTANT: Avoid extreme words like 'manipulate', 'destroy', 'control people', 'dominance', or 'coercion'. Focus on influence, confidence, and reading people safely.
     Return strictly JSON format:
     {{
         "title": "Short viral title with hashtags",
-        "description": "Engaging description with #Shorts #DarkPsychology #Mindset",
+        "description": "Engaging description with #Shorts #Psychology #Mindset",
         "search_query": "dark moody night city rain aesthetic",
         "hook": "Extreme hook sentence (max 6 words)",
         "body": [
@@ -140,7 +154,7 @@ def generate_content():
     }}
     """
     
-    selected_model_name = None
+    selected_model_name = "models/gemini-1.5-flash"
     try:
         for m in genai.list_models():
             if 'generateContent' in m.supported_generation_methods and 'flash' in m.name:
@@ -149,25 +163,35 @@ def generate_content():
     except Exception:
         pass
 
-    if not selected_model_name:
-        selected_model_name = "models/gemini-1.5-flash"
-
     model = genai.GenerativeModel(selected_model_name)
     
-    # Auto-Retry for Gemini Rate Limit
-    max_retries = 3
+    max_retries = 5 # Increased retries to handle regeneration if content is unsafe
     for attempt in range(max_retries):
         try:
+            chosen_topic = random.choice(topics)
+            prompt = prompt_template.format(topic=chosen_topic)
             response = model.generate_content(prompt)
             clean_text = response.text.replace("```json", "").replace("```", "").strip()
-            return json.loads(clean_text)
+            content_json = json.loads(clean_text)
+            
+            # --- ADDED: Check if content is safe before returning ---
+            full_text_to_check = content_json.get("title", "") + " " + content_json.get("description", "") + " " + " ".join(content_json.get("body", []))
+            if is_content_safe(full_text_to_check):
+                 return content_json
+            else:
+                 print(f"🔄 Attempt {attempt + 1}: Unsafe content generated. Retrying generation...")
+                 time.sleep(3) # Short pause before retry
+                 continue # Loop back and generate again
+                 
         except Exception as e:
             print(f"[Gemini API Error] Attempt {attempt + 1} failed: {e}")
             if attempt < max_retries - 1:
-                print("⏳ Rate limit reached. Waiting 20 seconds before retrying...")
+                print("⏳ Waiting before retrying...")
                 time.sleep(20)
             else:
-                raise RuntimeError("Failed to generate content after maximum retries.")
+                raise RuntimeError("Failed to generate safe content after maximum retries.")
+    
+    raise RuntimeError("Failed to generate safe content after maximum retries due to policy restrictions.")
 
 def download_background_videos(query="dark mood", count=3):
     if not PEXELS_API_KEY:
@@ -219,6 +243,12 @@ async def generate_voice(text_script, output_audio_path="voice.mp3"):
 def create_engaging_short(content_data, voice_path, bg_video_paths=[], bgm_path=None, output_path="final_video.mp4"):
     voice_clip = AudioFileClip(voice_path)
     total_duration = voice_clip.duration
+    
+    # --- ADDED: Enforce Maximum Duration (58s) ---
+    if total_duration > MAX_VIDEO_DURATION:
+        print(f"⚠️ Voiceover is too long ({total_duration}s). Trimming to {MAX_VIDEO_DURATION}s to avoid YouTube Shorts block.")
+        total_duration = MAX_VIDEO_DURATION
+        voice_clip = voice_clip.subclip(0, total_duration)
 
     # Audio Mixing
     audio_clips = [voice_clip]
@@ -303,6 +333,11 @@ def create_engaging_short(content_data, voice_path, bg_video_paths=[], bgm_path=
         current_time += time_per_section
 
     final_video = CompositeVideoClip(clips, size=(1080, 1920)).set_audio(final_audio)
+    
+    # --- ADDED: Final Safeguard check on final render duration ---
+    if final_video.duration > MAX_VIDEO_DURATION:
+         final_video = final_video.subclip(0, MAX_VIDEO_DURATION)
+         
     final_video.write_videofile(output_path, fps=30, codec='libx264', audio_codec='aac', preset='ultrafast', threads=4)
     return output_path
 
@@ -336,7 +371,7 @@ def upload_to_youtube(video_path, title, description):
 # 6. MAIN PIPELINE
 # ==========================================
 def main():
-    print("🚀 [1/6] Generating Content...")
+    print("🚀 [1/6] Generating Safe Content...")
     content = generate_content()
     
     print("🎬 [2/6] Fetching Multi-Scene Background Videos...")
@@ -348,7 +383,7 @@ def main():
     print("🎙️ [4/6] Generating Voiceover...")
     asyncio.run(generate_voice(f"{content['hook']} {' '.join(content['body'])} {content['cta']}", "voice.mp3"))
 
-    print("🎨 [5/6] Rendering Multi-Scene Video...")
+    print("🎨 [5/6] Rendering Multi-Scene Video (Max 58s)...")
     video_path = create_engaging_short(content, "voice.mp3", bg_video_paths=bg_videos, bgm_path=bgm_path)
 
     print("⏳ [6/6] Telegram Approval...")
