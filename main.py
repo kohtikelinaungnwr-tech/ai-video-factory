@@ -106,7 +106,11 @@ def ask_telegram_approval(title, video_path=None, timeout_seconds=600):
             pass
         time.sleep(3)
 
-    requests.post(f"{base_url}/sendMessage", json={"chat_id": TELEGRAM_CHAT_ID, "text": "⏰ *10 minutes timeout reached.* Auto-publishing..."})
+    try:
+        requests.post(f"{base_url}/sendMessage", json={"chat_id": TELEGRAM_CHAT_ID, "text": "⏰ *10 minutes timeout reached.* Auto-publishing..."}, timeout=10)
+    except Exception as e:
+        print(f"Telegram API Connection Error ignored: {e}")
+    
     return True
 
 def send_telegram_notification(text):
