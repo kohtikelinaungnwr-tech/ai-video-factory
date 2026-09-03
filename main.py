@@ -273,7 +273,7 @@ def create_engaging_short(content_data, voice_path, bg_video_paths=[], bgm_path=
         try:
             bgm_clip = AudioFileClip(bgm_path)
             bgm_clip = bgm_clip.fx(vfx.loop, duration=total_duration) if bgm_clip.duration < total_duration else bgm_clip.subclip(0, total_duration)
-            bgm_clip = bgm_clip.volumex(0.18)
+            bgm_clip = bgm_clip.volumex(0.3)
             audio_clips.append(bgm_clip)
         except Exception:
             pass
