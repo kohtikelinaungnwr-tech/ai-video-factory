@@ -147,17 +147,25 @@ def generate_content():
     
     prompt_template = """
     Create a highly engaging 45-second viral YouTube Short / Reel script about: {topic}.
-    IMPORTANT: Avoid extreme words like 'manipulate', 'destroy', 'control people', 'dominance', or 'coercion'. Focus on influence, confidence, and reading people safely.
+    
+    CRITICAL RULES:
+    1. DO NOT use markdown formatting, asterisks (*), bolding, or any special characters. Write in plain, spoken English only.
+    2. Avoid extreme words like 'manipulate', 'destroy', 'control people', 'dominance', or 'coercion'. Focus on influence, confidence, and reading people safely.
+    3. Break down the body into VERY SHORT phrases (max 5 to 8 words per item) so subtitles appear rapidly and dynamic.
+    
     Return strictly JSON format:
     {{
         "title": "Short viral title with hashtags",
         "description": "Engaging description with #Shorts #Psychology #Mindset",
-        "search_query": "dark moody night city rain aesthetic",
+        "search_query": "people walking dark cinematic shadows",
         "hook": "Extreme hook sentence (max 6 words)",
         "body": [
-            "Point 1 in short, punchy, high-impact sentences (max 25 words)", 
-            "Point 2 in short, punchy, high-impact sentences (max 25 words)", 
-            "Point 3 in short, punchy, high-impact sentences (max 25 words)"
+            "Short phrase 1 (max 7 words)", 
+            "Short phrase 2 (max 7 words)", 
+            "Short phrase 3 (max 7 words)",
+            "Short phrase 4 (max 7 words)",
+            "Short phrase 5 (max 7 words)",
+            "Short phrase 6 (max 7 words)"
         ],
         "cta": "Follow for daily psychology hacks."
     }}
