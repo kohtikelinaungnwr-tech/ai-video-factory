@@ -36,9 +36,14 @@ if GEMINI_API_KEY:
     genai.configure(api_key=GEMINI_API_KEY)
 
 DARK_BGM_URLS = [
-    "https://cdn.pixabay.com/download/audio/2022/05/27/audio_1808fbf07a.mp3?filename=dark-mystery-trailer-taking-action-112194.mp3",
-    "https://cdn.pixabay.com/download/audio/2022/10/14/audio_9939f792cb.mp3?filename=cinematic-dark-mystery-123438.mp3",
-    "https://cdn.pixabay.com/download/audio/2022/01/18/audio_d0a13f69d2.mp3?filename=dark-ambient-10943.mp3"
+    # မိုးသည်းထန်စွာရွာသွန်းသံနှင့် တည်ငြိမ်သောအသံ (Rain Ambient)
+    "https://cdn.pixabay.com/download/audio/2022/03/15/audio_c8d1d6d95f.mp3?filename=rain-ambient-110397.mp3",
+    
+    # ရုပ်ရှင်ဆန်ဆန် မှိုင်းညို့ညို့ နောက်ခံအသံ (Ambient Atmospheric)
+    "https://cdn.pixabay.com/download/audio/2021/06/07/audio_cdfb955189.mp3?filename=ambient-atmospheric-4947.mp3",
+    
+    # တိတ်ဆိတ်ငြိမ်သက်သော ရုပ်ရှင်နောက်ခံ သဘာဝအသံ (Dark Gameplay/Ambient)
+    "https://cdn.pixabay.com/download/audio/2022/03/09/audio_eb16546260.mp3?filename=ambient-23335.mp3"
 ]
 
 # --- ADDED: Policy Compliance Blacklist ---
