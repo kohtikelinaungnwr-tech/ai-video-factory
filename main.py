@@ -101,7 +101,7 @@ def ask_telegram_approval(title, video_path=None, timeout_seconds=600):
                         data = callback.get("data")
                         if data == "publish_now":
                             requests.post(f"{base_url}/answerCallbackQuery", json={"callback_query_id": callback["id"], "text": "Publishing immediately!"})
-                            requests.post(f"{base_url}/sendMessage", json={"chat_id": TELEGRAM_CHAT_ID, "text": "🚀 *Approved:* Uploading to YouTube & Facebook..."})
+                            requests.post(f"{base_url}/sendMessage", json={"chat_id": TELEGRAM_CHAT_ID, "text": "🚀 *Approved:* Uploading to YouTube, Facebook & Pinterest..."})
                             return True
                         elif data == "cancel_publish":
                             requests.post(f"{base_url}/answerCallbackQuery", json={"callback_query_id": callback["id"], "text": "Cancelled!"})
@@ -182,7 +182,7 @@ def generate_content():
 
     model = genai.GenerativeModel(selected_model_name)
     
-    max_retries = 5 # Increased retries to handle regeneration if content is unsafe
+    max_retries = 5 
     for attempt in range(max_retries):
         try:
             chosen_topic = random.choice(topics)
@@ -191,14 +191,13 @@ def generate_content():
             clean_text = response.text.replace("```json", "").replace("```", "").strip()
             content_json = json.loads(clean_text)
             
-            # --- ADDED: Check if content is safe before returning ---
             full_text_to_check = content_json.get("title", "") + " " + content_json.get("description", "") + " " + " ".join(content_json.get("body", []))
             if is_content_safe(full_text_to_check):
                  return content_json
             else:
                  print(f"🔄 Attempt {attempt + 1}: Unsafe content generated. Retrying generation...")
-                 time.sleep(3) # Short pause before retry
-                 continue # Loop back and generate again
+                 time.sleep(3)
+                 continue
                  
         except Exception as e:
             print(f"[Gemini API Error] Attempt {attempt + 1} failed: {e}")
@@ -261,13 +260,11 @@ def create_engaging_short(content_data, voice_path, bg_video_paths=[], bgm_path=
     voice_clip = AudioFileClip(voice_path)
     total_duration = voice_clip.duration
     
-    # --- ADDED: Enforce Maximum Duration (58s) ---
     if total_duration > MAX_VIDEO_DURATION:
         print(f"⚠️ Voiceover is too long ({total_duration}s). Trimming to {MAX_VIDEO_DURATION}s to avoid YouTube Shorts block.")
         total_duration = MAX_VIDEO_DURATION
         voice_clip = voice_clip.subclip(0, total_duration)
 
-    # Audio Mixing
     audio_clips = [voice_clip]
     if bgm_path and os.path.exists(bgm_path):
         try:
@@ -280,7 +277,6 @@ def create_engaging_short(content_data, voice_path, bg_video_paths=[], bgm_path=
 
     final_audio = CompositeAudioClip(audio_clips)
 
-    # Multi-Scene Background Setup
     if bg_video_paths and isinstance(bg_video_paths, list) and len(bg_video_paths) > 0:
         segment_duration = total_duration / len(bg_video_paths)
         bg_clips = []
@@ -305,7 +301,6 @@ def create_engaging_short(content_data, voice_path, bg_video_paths=[], bgm_path=
 
     clips = [bg_clip]
     
-    # 1. MINDSET VAULT Watermarks
     wm_top = (
         TextClip("MINDSET VAULT", fontsize=45, color='white', font='Liberation-Sans-Bold', stroke_color='black', stroke_width=2)
         .set_opacity(0.35)
@@ -320,7 +315,6 @@ def create_engaging_short(content_data, voice_path, bg_video_paths=[], bgm_path=
     )
     clips.extend([wm_top, wm_bottom])
 
-    # 2. Viral Subtitles
     sections = [content_data["hook"]] + content_data["body"] + [content_data["cta"]]
     time_per_section = total_duration / len(sections)
     current_time = 0.0
@@ -351,7 +345,6 @@ def create_engaging_short(content_data, voice_path, bg_video_paths=[], bgm_path=
 
     final_video = CompositeVideoClip(clips, size=(1080, 1920)).set_audio(final_audio)
     
-    # --- ADDED: Final Safeguard check on final render duration ---
     if final_video.duration > MAX_VIDEO_DURATION:
          final_video = final_video.subclip(0, MAX_VIDEO_DURATION)
          
@@ -359,7 +352,7 @@ def create_engaging_short(content_data, voice_path, bg_video_paths=[], bgm_path=
     return output_path
 
 # ==========================================
-# 5. UPLOADERS
+# 5. UPLOADERS (YouTube, Facebook & Pinterest)
 # ==========================================
 def get_youtube_service():
     if not TOKEN_PICKLE_BASE64: return None
@@ -384,6 +377,71 @@ def upload_to_youtube(video_path, title, description):
     except Exception as e:
         return False, str(e)
 
+def upload_to_pinterest(video_path, title, description, board_id=None):
+    """
+    Pinterest API v5 ကိုသုံး၍ ဗီဒီယို ပင်တင်ရန် (Video Pin)
+    """
+    access_token = os.environ.get("PINTEREST_ACCESS_TOKEN")
+    if not access_token:
+        print("Error: PINTEREST_ACCESS_TOKEN not found in environment variables!")
+        return False, "Auth failed"
+
+    print("Uploading video to Pinterest...")
+    
+    register_url = "https://api.pinterest.com/v5/media"
+    headers = {
+        "Authorization": f"Bearer {access_token}",
+        "Content-Type": "application/json"
+    }
+    register_data = {
+        "media_type": "video"
+    }
+    
+    response = requests.post(register_url, headers=headers, json=register_data)
+    if response.status_code != 201:
+        error_msg = f"Failed to register media: {response.text}"
+        print(error_msg)
+        return False, error_msg
+        
+    res_json = response.json()
+    upload_url = res_json.get("upload_url")
+    upload_parameters = res_json.get("upload_parameters")
+    media_id = res_json.get("media_id")
+    
+    with open(video_path, "rb") as f:
+        files = {"file": f}
+        upload_res = requests.post(upload_url, data=upload_parameters, files=files)
+        
+    if upload_res.status_code not in [200, 204]:
+        error_msg = f"Failed to upload video binary: {upload_res.text}"
+        print(error_msg)
+        return False, error_msg
+        
+    print("Video binary uploaded successfully. Creating Pin...")
+    
+    pin_url = "https://api.pinterest.com/v5/pins"
+    pin_data = {
+        "title": title[:100],
+        "description": description[:500],
+        "media_source": {
+            "source_type": "video_id",
+            "media_id": media_id
+        }
+    }
+    
+    if board_id:
+        pin_data["board_id"] = board_id
+        
+    pin_res = requests.post(pin_url, headers=headers, json=pin_data)
+    if pin_res.status_code == 201:
+        pin_id = pin_res.json().get("id")
+        print("Successfully posted Pin to Pinterest!")
+        return True, f"https://www.pinterest.com/pin/{pin_id}" if pin_id else "Uploaded Successfully!"
+    else:
+        error_msg = f"Failed to create Pin: {pin_res.text}"
+        print(error_msg)
+        return False, error_msg
+
 # ==========================================
 # 6. MAIN PIPELINE
 # ==========================================
@@ -407,7 +465,7 @@ def main():
     if not ask_telegram_approval(content["title"], video_path, 600):
         return
 
-    print("🚀 Uploading to YouTube & Facebook...")
+    print("🚀 Uploading to YouTube, Facebook & Pinterest...")
     yt_success, yt_result = upload_to_youtube(video_path, content["title"], content["description"])
     
     fb_success, fb_result = False, "Skipped"
@@ -422,7 +480,15 @@ def main():
         fb_success = False
         fb_result = str(e)
 
-    report_msg = f"🚀 *Completed!*\n📌 *Title:* {content['title']}\n{'✅ YT: ' + yt_result if yt_success else '⚠️ YT: ' + yt_result}\n{'✅ FB: ' + fb_result if fb_success else '⚠️ FB: ' + fb_result}"
+    pin_success, pin_result = upload_to_pinterest(video_path, content["title"], content["description"])
+
+    report_msg = (
+        f"🚀 *Completed!*\n"
+        f"📌 *Title:* {content['title']}\n"
+        f"{'✅ YT: ' + yt_result if yt_success else '⚠️ YT: ' + yt_result}\n"
+        f"{'✅ FB: ' + fb_result if fb_success else '⚠️ FB: ' + fb_result}\n"
+        f"{'✅ Pinterest: ' + pin_result if pin_success else '⚠️ Pinterest: ' + pin_result}"
+    )
     send_telegram_notification(report_msg)
     print("🎉 Done!")
 
